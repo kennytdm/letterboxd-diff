@@ -1,0 +1,12 @@
+# Python/System junk
+__pycache__/
+*.pyc
+.DS_Store
+.env
+
+# Streamlit local cache
+.streamlit/
+
+# Debug files
+check_this*
+launch.json
