@@ -6,6 +6,8 @@ import random
 def get_watched_films(username, genre=None, decade=None, person=None, role="actor"):
     watched_films = {}
     page = 1
+
+    print(f">>> STARTING SCRAPE FOR: {username}") # This will show in logs
     
     while True:
         genre_path = f"genre/{genre.lower()}/" if genre else ""
@@ -18,6 +20,8 @@ def get_watched_films(username, genre=None, decade=None, person=None, role="acto
 
         url = f"https://letterboxd.com/{username}/films/{person_path}{decade_path}{genre_path}page/{page}/"
         response = requests.get(url, impersonate="chrome120", timeout=10)
+
+        print(f"Page {page} | Status: {response.status_code} | URL: {url}")
 
         if response.status_code == 403:
             time.sleep(5)
@@ -49,8 +53,14 @@ def get_watched_films(username, genre=None, decade=None, person=None, role="acto
             if slug:
                 clean_slug = slug.strip('/').replace('film/', '')
                 watched_films[clean_slug] = rating
-
+        
+        print(f"Found {len(watched_films)} films on page {page}")
         page += 1
-        time.sleep(random.uniform(0.5, 0.8)) 
+
+        base_sleep = random(0.5, 0.8)
+        if page % 10 == 0:
+            time.sleep(2)
+        else:
+            time.sleep(base_sleep)
 
     return watched_films
