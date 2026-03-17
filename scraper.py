@@ -15,7 +15,10 @@ def get_headers(browser):
         "User-Agent": ua,
         "Referer": "https://letterboxd.com/",
         "Accept-Language": "en-GB,en;q=0.9",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Cookie": "font-size=small; theme=dark;"
     }
 
 def get_watched_films(username, genre=None, decade=None, person=None, role="actor"):
@@ -37,8 +40,9 @@ def get_watched_films(username, genre=None, decade=None, person=None, role="acto
         url = f"https://letterboxd.com/{username}/films/{person_path}{decade_path}{genre_path}page/{page}/"
         
         success = False
-        for attempt in range(len(browsers)):
-            response = requests.get(url, headers=get_headers(browsers[attempt]), impersonate=browsers[attempt], timeout=10)
+        for attempt in range(len(browsers)*2):
+            this_browser = browsers[attempt%len(browsers)]
+            response = requests.get(url, headers=get_headers(this_browser), impersonate=this_browser, timeout=10)
             if response.status_code == 200:
                 success = True
                 break
@@ -49,7 +53,7 @@ def get_watched_films(username, genre=None, decade=None, person=None, role="acto
         
         if not success:
             print(f"Final failure for {username} at page {page}: {response.status_code}", flush=True)
-            break
+            raise RuntimeError(f"Letterboxd blocked the request (Status {response.status_code}).")
 
         soup = BeautifulSoup(response.content, 'lxml')
         posters = soup.find_all("div", attrs={"data-component-class": "LazyPoster"})
