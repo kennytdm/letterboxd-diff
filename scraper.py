@@ -3,9 +3,25 @@ from bs4 import BeautifulSoup
 import time
 import random
 
+def get_headers(browser):
+    if "safari" in browser:
+        ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+    elif "edge" in browser:
+        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
+    else:
+        ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    
+    return {
+        "User-Agent": ua,
+        "Referer": "https://letterboxd.com/",
+        "Accept-Language": "en-GB,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+    }
+
 def get_watched_films(username, genre=None, decade=None, person=None, role="actor"):
     watched_films = {}
     page = 1
+    browsers = ["chrome120", "safari17", "edge101"]
 
     print(f">>> STARTING SCRAPE FOR: {username}", flush=True)
     
@@ -19,15 +35,20 @@ def get_watched_films(username, genre=None, decade=None, person=None, role="acto
             person_path = f"with/{role}/{person_slug}/"
 
         url = f"https://letterboxd.com/{username}/films/{person_path}{decade_path}{genre_path}page/{page}/"
-        response = requests.get(url, impersonate="chrome120", timeout=10)
+        
+        success = False
+        for attempt in range(len(browsers)):
+            response = requests.get(url, headers=get_headers(browsers[attempt]), impersonate=browsers[attempt], timeout=10)
+            if response.status_code == 200:
+                success = True
+                break
+            print(f"Attempt {attempt+1} failed with status {response.status_code}. Retrying...", flush=True)
+            time.sleep(random.uniform(2, 4))
 
         print(f"Page {page} | Status: {response.status_code} | URL: {url}", flush=True)
-
-        if response.status_code == 403:
-            time.sleep(5)
-            continue 
         
-        if response.status_code != 200:
+        if not success:
+            print(f"Final failure for {username} at page {page}: {response.status_code}", flush=True)
             break
 
         soup = BeautifulSoup(response.content, 'lxml')
@@ -57,7 +78,7 @@ def get_watched_films(username, genre=None, decade=None, person=None, role="acto
         print(f"Found {len(watched_films)} films after page {page}", flush=True)
         page += 1
 
-        base_sleep = random(0.5, 0.8)
+        base_sleep = random.uniform(0.5, 0.8)
         if page % 10 == 0:
             time.sleep(2)
         else:
