@@ -21,7 +21,7 @@ def get_headers(browser):
 def get_watched_films(username, genre=None, decade=None, person=None, role="actor"):
     watched_films = {}
     page = 1
-    browsers = ["chrome120", "safari17", "edge101"]
+    browsers = ["chrome120", "safari15_5", "edge101"]
 
     print(f">>> STARTING SCRAPE FOR: {username}", flush=True)
     
