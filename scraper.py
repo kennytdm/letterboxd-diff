@@ -66,9 +66,6 @@ def get_filtered_count(url, session):
                     target = soup.select_one('.filtered-message .ui-block-heading, .filtered-message, .ui-block-heading')
                 else:
                     target = soup.select_one('.replace-if-you, .breadcrumb, .ui-block-heading')
-
-                with open("debug_response.html", "w", encoding="utf-8") as f:
-                    f.write(response.text)
                 
                 if target:
                     raw_text = target.get_text(" ", strip=True)
@@ -230,7 +227,7 @@ def get_watched_films(username, session, genre=None, decade=None, person=None, r
                 progressBar.progress(progress_perc, text=f"Scraping {username}: {current_count}/{totalFilms} films")
             else:
                 # Indeterminate Progress (Spinner Style)
-                progressBar.info(f"⏳ {username}: Found {current_count} films... (Scraping)")
+                progressBar.progress(0, text=f"Scraping {username}: {current_count} found...")
 
         page += 1
         # Only sleep if we expect more pages

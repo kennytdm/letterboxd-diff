@@ -8,14 +8,25 @@ import random
 from scraper import get_watched_films
 from scraper import get_total_films
 
-# Apply the cache here in the main app
-#@st.cache_data(ttl="1d")
-def cached_scrape(username, session, genre, decade, person, role, _p_bar=None, total_films=None):
+def live_scrape(username, session, genre, decade, person, role, p_bar=None, total_films=None):
     try:
-        data =  get_watched_films(username, session, genre, decade, person, role, progressBar=_p_bar, totalFilms=total_films)
+        # We pass the real p_bar here. get_watched_films will update it page-by-page.
+        data = get_watched_films(
+            username, session, genre, decade, person, role, 
+            progressBar=p_bar, totalFilms=total_films
+        )
         return data
     except Exception as e:
-        st.error(f"Scraper blocked for {username}. Please wait a minute and retry.")
+        return None
+
+def live_watchlist_scrape(username, session, genre, decade, person, role, p_bar=None):
+    try:
+        data = get_watched_films(
+            username, session, genre, decade, person, role, 
+            is_watchlist=True, progressBar=p_bar
+        )
+        return data
+    except Exception as e:
         return None
 
 st.set_page_config(
@@ -34,6 +45,12 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("Letterboxd Comparison Tool")
+
+st.markdown("""
+    <p style="font-size: 1.1rem; color: #888; margin-bottom: 25px;">
+        Find movies that <u>First Username</u> has seen that <u>Second Username</u> has not.
+    </p>
+""", unsafe_allow_html=True)
 
 # Initialize the persistent web session
 if 'web_session' not in st.session_state:
@@ -61,8 +78,8 @@ if st.sidebar.button("Clear Cache & Retry"):
     st.cache_data.clear()
     st.rerun()
 
-user1 = st.text_input("First Username")
-user2 = st.text_input("Second Username")
+user1 = st.text_input("First Username", placeholder="The person who HAS seen the films")
+user2 = st.text_input("Second Username", placeholder="The person who HAS NOT seen them")
 
 if st.button("Calculate Difference"):
     if not user1 or not user2:
@@ -84,7 +101,7 @@ if st.button("Calculate Difference"):
         def scrape_with_ctx(username, session, p_holder, p_bar_ref, total_count):
             add_script_run_ctx(None, ctx) 
             p_holder.info(f"🔍 Scraping {username}...")
-            data =  cached_scrape(username, session, selected_genre, selected_decade, person_search, selected_role, _p_bar=p_bar_ref, total_films=total_count)
+            data =  live_scrape(username, session, selected_genre, selected_decade, person_search, selected_role, p_bar=p_bar_ref, total_films=total_count)
             if data is not None:
                 p_holder.success(f"✅ {username}: {len(data)} films found.")
             else:
@@ -95,9 +112,10 @@ if st.button("Calculate Difference"):
             add_script_run_ctx(None, ctx) # 'ctx' must be in scope
             p_holder.info(f"📋 Fetching {username}'s Watchlist...")
             # We pass is_watchlist=True here
-            data = get_watched_films(username, session, selected_genre, selected_decade, 
-                                    person_search, selected_role, is_watchlist=True, 
-                                    progressBar=p_bar_ref)
+            data = live_watchlist_scrape(
+                username, session, selected_genre, selected_decade, 
+                person_search, selected_role, p_bar=p_bar_ref
+            )
             if data:
                 p_holder.success(f"✅ {username} Watchlist: {len(data)} films.")
             return data
