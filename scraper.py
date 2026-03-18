@@ -109,7 +109,7 @@ def get_watched_films(username, session, genre=None, decade=None, person=None, r
     watched_films = {}
     page = 1
     first_page_soup = None
-    browsers = ["chrome120", "safari15_5", "edge101"]
+    browsers = ["safari15_5", "chrome120", "edge101"]
 
     page_size = 72 #default for film grids, 28 for watchlist
     list_type = "watchlist" if is_watchlist else "films"
@@ -183,7 +183,7 @@ def get_watched_films(username, session, genre=None, decade=None, person=None, r
                 except Exception as e:
                     print(f"Request error: {e}")
                 
-                time.sleep((attempt+1)*random.uniform(1, 2))
+                time.sleep((attempt+1)*random.uniform(0.3, 0.6))
 
             if not success:
                 break # Exit loop if blocked or 404
@@ -232,6 +232,6 @@ def get_watched_films(username, session, genre=None, decade=None, person=None, r
         page += 1
         # Only sleep if we expect more pages
         if not totalFilms or len(watched_films) < totalFilms:
-            time.sleep(random.uniform(0.3, 0.6))
+            time.sleep(random.uniform(0.05, 0.1))
 
     return watched_films
