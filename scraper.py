@@ -53,72 +53,102 @@ def get_total_films(username, session):
     return None
 
 def get_filtered_count(url, session):
-    try:
-        response = session.get(url, headers=get_headers("chrome"), impersonate="chrome", timeout=10)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'lxml')
-            target = soup.select_one('.replace-if-you, .breadcrumb, .ui-block-heading')
-            
-            if target:
-                raw_text = target.get_text(" ", strip=True)
-                # 1. Normalize: "amber <3 has watched 113 action films ."
-                clean_text = " ".join(raw_text.split()).replace(',', '')
+    browsers = ["chrome120", "safari15_5", "edge101"]
+    for attempt in range(1, 4):
+        this_browser = browsers[attempt % len(browsers)]
+        try:
+            response = session.get(url, headers=get_headers(this_browser), impersonate=this_browser, timeout=10)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.content, 'lxml')
                 
-                # 2. THE "LAST NUMBER" REGEX:
-                # (\d+)      -> Capture a number
-                # (?!.*\d)   -> Negative Lookahead: Ensure NO OTHER digits exist after this one...
-                # (?=.*films?) -> Positive Lookahead: ...until we hit the word "films"
-                match = re.search(r'(\d+)(?!.*\d)(?=.*films?)', clean_text, re.IGNORECASE)
-                
-                if match:
-                    count = int(match.group(1))
-                    print(f"DEBUG: Final Success! Count: {count}", flush=True)
-                    return count, soup
-                    
-                # 3. THE "HITCHCOCK" FALLBACK (Manual Split)
-                # If Regex fails, we walk backwards from the word "films"
-                words = clean_text.lower().split()
-                for i, word in enumerate(words):
-                    if "film" in word:
-                        # Check the previous 3 words for the first digit we find
-                        # This handles "113 films", "113 action films", "113 animated action films"
-                        for lookback in range(1, 4):
-                            if i - lookback >= 0:
-                                prev = words[i - lookback]
-                                if prev.isdigit():
-                                    return int(prev), soup
+                if "/watchlist/" in url:
+                    #Watchlists use the 'filtered-message' section or the specific heading inside it
+                    target = soup.select_one('.filtered-message .ui-block-heading, .filtered-message, .ui-block-heading')
+                else:
+                    target = soup.select_one('.replace-if-you, .breadcrumb, .ui-block-heading')
 
-    except Exception as e:
-        print(f"DEBUG: Extraction Exception: {e}", flush=True)
+                with open("debug_response.html", "w", encoding="utf-8") as f:
+                    f.write(response.text)
+                
+                if target:
+                    raw_text = target.get_text(" ", strip=True)
+                    # 1. Normalize: "amber <3 has watched 113 action films ."
+                    clean_text = " ".join(raw_text.split()).replace(',', '')
+
+                    genres = r'Action|Adventure|Animation|Comedy|Crime|Documentary|Drama|Family|Fantasy|History|Horror|Music|Mystery|Romance|Sci-Fi|Science Fiction|Thriller|War|Western|Noir|Tv Movie'
+                    
+                    # 2. THE "LAST NUMBER" REGEX:
+                    # (\d+)      -> Capture a number
+                    # (?!.*\d)   -> Negative Lookahead: Ensure NO OTHER digits exist after this one...
+                    # (?=.*films?) -> Positive Lookahead: ...until we hit the word "films"
+                    #match = re.search(r'(\d+)(?!.*\d)(?=.*films?)', clean_text, re.IGNORECASE)
+                    pattern = rf'(\d+)(?:\s*(?:films?)|(?:\s+(?:{genres})))'
+
+                    match = re.search(pattern, clean_text, re.IGNORECASE)
+
+                    if match:
+                        count = int(match.group(1))
+                        print(f"DEBUG: Final Success! Count: {count}", flush=True)
+                        return count, soup
+                        
+                    # 3. THE "HITCHCOCK" FALLBACK (Manual Split)
+                    # If Regex fails, we walk backwards from the word "films"
+                    words = clean_text.lower().split()
+                    for i, word in enumerate(words):
+                        if "film" in word:
+                            # Check the previous 3 words for the first digit we find
+                            # This handles "113 films", "113 action films", "113 animated action films"
+                            for lookback in range(1, 4):
+                                if i - lookback >= 0:
+                                    prev = words[i - lookback]
+                                    if prev.isdigit():
+                                        return int(prev), soup
+
+        except Exception as e:
+            print(f"DEBUG: Extraction Exception: {e}", flush=True)
     return None
 
-def get_watched_films(username, session, genre=None, decade=None, person=None, role="actor", progressBar=None, totalFilms=None):
+def get_watched_films(username, session, genre=None, decade=None, person=None, role="actor", progressBar=None, totalFilms=None, is_watchlist=None):
     watched_films = {}
     page = 1
     first_page_soup = None
     browsers = ["chrome120", "safari15_5", "edge101"]
 
-    # 1. PATH ASSEMBLY - Clean and URL-safe
+    page_size = 72 #default for film grids, 28 for watchlist
+    list_type = "watchlist" if is_watchlist else "films"
+    
     genre_path = f"genre/{genre.lower()}/" if genre else ""
     decade_path = f"decade/{decade}/" if decade else ""
     person_path = f"with/{role}/{person.lower().replace(' ', '-')}/" if person else ""
     
-    base_url = f"https://letterboxd.com/{username}/films/{person_path}{decade_path}{genre_path}"
+    # We build the URL using the list_type variable
+    base_url = f"https://letterboxd.com/{username}/{list_type}/{person_path}{decade_path}{genre_path}"
     base_url = base_url.replace("//", "/").replace("https:/", "https://")
 
-    # 2. THE RECON PHASE (Precision + Speed)
-    # We try to find the exact count and grab the Page 1 HTML simultaneously
-    if (genre or decade or person):
-        result = get_filtered_count(base_url)
-        if result:
-            count, soup_obj = result
-            totalFilms = count
-            first_page_soup = soup_obj
-            print(f"DEBUG: Recon Success for {username}. Total: {totalFilms}", flush=True)
+    # 2. THE RECON PHASE
+    # Now we ALWAYS run recon to establish the grid size and total count
+    result = get_filtered_count(base_url, session=session)
+    if result:
+        totalFilms, first_page_soup = result
+        
+        # Count posters on Page 1 to determine the grid limit
+        posters_on_p1 = first_page_soup.find_all("div", attrs={"data-component-class": "LazyPoster"}) or \
+                        first_page_soup.find_all(attrs={"data-target-link": True})
+        
+        p1_count = len(posters_on_p1)
+        
+        # If total films exceed what's on p1, then p1_count is our confirmed page_size
+        if totalFilms > p1_count and p1_count > 0:
+            page_size = p1_count
         else:
-            print(f"DEBUG: Recon Failed for {username}. Switching to Blind Scrape.", flush=True)
+            # Total emergency fallback if BeautifulSoup tripped 
+            page_size = 28 if is_watchlist else 72
+            
+        print(f"DEBUG: [Recon] {username} | Total: {totalFilms} | Page Size: {page_size}", flush=True)
+    else:
+        print(f"DEBUG: Recon Failed for {username}. Using standard defaults.", flush=True)
 
-    print(f">>> STARTING SCRAPE FOR: {username}", flush=True)
+    print(f">>> STARTING {list_type.upper()} SCRAPE: {username}", flush=True)
 
     # 3. THE HYBRID LOOP
     while True:
@@ -147,12 +177,16 @@ def get_watched_films(username, session, genre=None, decade=None, person=None, r
                         break
                     elif response.status_code == 404:
                         break # End of the line
+                    elif response.status_code == 429:
+                        print("!!! RATE LIMITED !!! Taking a 30s breather...", flush=True)
+                        time.sleep(30)
+                        #Then retry the request one last time
                     else:
-                        print(f"DEBUG: [Page {page}] {username} | Attempt {attempt} FAILED (Status: {response.status_code})", flush=True)
+                        print(f"DEBUG: [Page {page}] {username} | Attempt {attempt+1} FAILED (Status: {response.status_code})", flush=True)
                 except Exception as e:
                     print(f"Request error: {e}")
                 
-                time.sleep(random.uniform(2, 4))
+                time.sleep((attempt+1)*random.uniform(1, 2))
 
             if not success:
                 break # Exit loop if blocked or 404
@@ -166,7 +200,8 @@ def get_watched_films(username, session, genre=None, decade=None, person=None, r
 
         for poster in posters:
             slug = poster.get('data-film-slug') or poster.get('data-target-link', '')
-            if not slug: continue
+            if not slug or slug == "#":
+                continue
             
             # Extraction: Title and Rating
             img = poster.find('img')
@@ -183,7 +218,8 @@ def get_watched_films(username, session, genre=None, decade=None, person=None, r
                             rating = int(c.split('-')[-1]) / 2.0
             
             clean_slug = slug.strip('/').replace('film/', '')
-            watched_films[clean_slug] = {"title": real_title, "rating": rating}
+            if clean_slug not in watched_films:
+                watched_films[clean_slug] = {"title": real_title, "rating": rating}
 
         # 5. DYNAMIC UI UPDATES
         if progressBar:
@@ -199,6 +235,6 @@ def get_watched_films(username, session, genre=None, decade=None, person=None, r
         page += 1
         # Only sleep if we expect more pages
         if not totalFilms or len(watched_films) < totalFilms:
-            time.sleep(random.uniform(0.6, 1.2))
+            time.sleep(random.uniform(0.3, 0.6))
 
     return watched_films
