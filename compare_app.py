@@ -52,6 +52,12 @@ st.markdown("""
     </p>
 """, unsafe_allow_html=True)
 
+st.markdown("""
+    <p style="font-size: 0.8rem; color: #888; margin-bottom: 25px;">
+        Click the arrow on the left for filters.
+    </p>
+""", unsafe_allow_html=True)
+
 # Initialize the persistent web session
 if 'web_session' not in st.session_state:
     st.session_state.web_session = requests.Session()
